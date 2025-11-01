@@ -163,7 +163,7 @@ def avaliar_modelo(model, dataloader, criterion, device):
 
 def train_looping(model, train_loader, val_loader, criterion, writer, device):
     optimizer = optim.Adam(model.parameters(), lr=0.001)
-    epochs = 11
+    epochs = 20
     
     model.to(device) 
 
@@ -201,7 +201,7 @@ def train_looping(model, train_loader, val_loader, criterion, writer, device):
         writer.add_scalars("Accuracies", {"Train": train_acc, "Validation": val_acc}, epoch)
 
     os.makedirs("models", exist_ok=True)
-    model_path = "models/rna_etapa2_classificador_imagem.pth" # Mudei o nome do modelo
+    model_path = "models/modelo2.pth" # Mudei o nome do modelo
 
     torch.save({
         'model_state_dict': model.state_dict(),
@@ -266,7 +266,7 @@ def main():
 
     # --- 4. O resto do script (Modelo, Treino, Avaliação) ---
 
-    writer = SummaryWriter(log_dir=f"runs/etapa2_multiclasse_aug_bs{BATCH_SIZE}") 
+    writer = SummaryWriter(log_dir=f"runs/teste2{BATCH_SIZE}") 
     
     model = Rede(num_classes=num_classes)
     
