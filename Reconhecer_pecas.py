@@ -6,15 +6,63 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, random_split, Dataset
 from torch.utils.tensorboard import SummaryWriter
 from torchvision import transforms
-from torchvision.datasets import ImageFolder # <-- IMPORTANTE: Usaremos isso
+from torchvision.datasets import ImageFolder 
 import os
 import cv2
 import numpy as np
 import random 
 import torchvision.models as models
-import pandas as pd
+# import pandas as pd
 
+# ============================
+# 1. Definição dos Pipelines (Transforms)
+# ============================
 
+# Tamanho que a ResNet espera (pode ser 128x128, 224x224, etc.)
+# Vamos manter o seu 128 para ser mais rápido
+IMG_SIZE = 128
+
+# Médias e desvios-padrão do ImageNet (correto para ResNet pré-treinada)
+NORMALIZE_MEAN = [0.485, 0.456, 0.406]
+NORMALIZE_STD = [0.229, 0.224, 0.225]
+
+# --- Pipeline de TREINO (Com Data Augmentation) ---
+transform_treino = transforms.Compose([
+    # Recorta uma área aleatória da imagem e redimensiona para IMG_SIZE
+    # Isso simula zoom e mudança de enquadramento. É ótimo!
+    transforms.RandomResizedCrop(IMG_SIZE, scale=(0.8, 1.0)), 
+    
+    # Vira a imagem horizontalmente com 50% de chance
+    # (assumindo que uma peça espelhada ainda seja da mesma classe)
+    transforms.RandomHorizontalFlip(p=0.5),
+    
+    # Rotaciona a imagem aleatoriamente em até 15 graus
+    # Simula a peça sendo fotografada em ângulos ligeiramente diferentes
+    transforms.RandomRotation(degrees=15),
+    
+    # Altera aleatoriamente o brilho, contraste e saturação
+    # Simula diferentes condições de iluminação
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+
+    # Converte para Tensor
+    transforms.ToTensor(),
+    
+    # Normaliza
+    transforms.Normalize(mean=NORMALIZE_MEAN, std=NORMALIZE_STD)
+])
+
+# --- Pipeline de VALIDAÇÃO e TESTE (Sem Augmentation) ---
+# Aqui, não queremos aleatoriedade. Queremos apenas formatar a imagem.
+transform_validacao_teste = transforms.Compose([
+    # Apenas redimensiona para o tamanho exato
+    transforms.Resize((IMG_SIZE, IMG_SIZE)), 
+    
+    # Converte para Tensor
+    transforms.ToTensor(),
+    
+    # Normaliza
+    transforms.Normalize(mean=NORMALIZE_MEAN, std=NORMALIZE_STD)
+])
 
 
 # ============================
@@ -165,54 +213,63 @@ def train_looping(model, train_loader, val_loader, criterion, writer, device):
     return model 
 
 # ============================
-# 5. Main
+# 5. Main (MODIFICADA para usar os novos pipelines)
 # ============================
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Usando dispositivo: {device}")
 
-    # --- Carregar o Dataset (necessário aqui para pegar num_classes) ---
+    # --- 1. Caminhos para os diretórios ---
+
+    # Este é o diretório que contém as pastas 'treino', 'validacao' e 'teste'
+    base_data_dir = "Datasets/" 
+    train_dir = os.path.join(base_data_dir, "treino")
+    val_dir = os.path.join(base_data_dir, "validacao")
+    test_dir = os.path.join(base_data_dir, "teste")
     
-    transform = transforms.Compose([
-        transforms.Resize((128, 128)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    # --- 2. Carregamento dos Datasets (Sem random_split) ---
     
-    dataset_root_dir = "Datasets/DatasetFormatado"  
     try:
-        full_dataset = ImageFolder(root=dataset_root_dir, transform=transform)
-        print(f"Dataset carregado. Classes: {full_dataset.classes}")
-        num_classes = len(full_dataset.classes) # <-- PEGA O NÚMERO DE CLASSES
-        if num_classes <= 1:
-            print("ERRO: São necessárias pelo menos 2 classes para CrossEntropyLoss.")
-            return
+        train_dataset = ImageFolder(root=train_dir, transform=transform_treino)
+        print(f"Dataset de TREINO carregado: {len(train_dataset)} imagens.")
+        print(f"Classes de Treino: {train_dataset.classes}")
+        
+        val_dataset = ImageFolder(root=val_dir, transform=transform_validacao_teste)
+        print(f"Dataset de VALIDAÇÃO carregado: {len(val_dataset)} imagens.")
+        
+        test_dataset = ImageFolder(root=test_dir, transform=transform_validacao_teste)
+        print(f"Dataset de TESTE carregado: {len(test_dataset)} imagens.")
+        
     except Exception as e:
-        print(f"Erro ao carregar dataset: {e}")
+        print(f"Erro ao carregar datasets. Verifique os caminhos e a estrutura de pastas.")
+        print(f"Diretório de treino esperado: {train_dir}")
+        print(f"Erro: {e}")
         return
 
-    # --- Divisão 80/10/10 ---
-    total_len = len(full_dataset) 
-    train_len = int(0.8 * total_len); val_len = int(0.1 * total_len)
-    test_len = total_len - train_len - val_len 
-    train_dataset, val_dataset, test_dataset = random_split(full_dataset, [train_len, val_len, test_len])
-
-    print(f"Total: {total_len}, Treino: {train_len}, Val: {val_len}, Teste: {test_len}")
-
-    # --- DataLoaders ---
-    train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True, num_workers=os.cpu_count() // 2 or 1) 
-    val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False, num_workers=os.cpu_count() // 2 or 1)
-    test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False, num_workers=os.cpu_count() // 2 or 1)
+    # Pega o número de classes do dataset de treino
+    num_classes = len(train_dataset.classes)
+    if num_classes <= 1:
+        print("ERRO: São necessárias pelo menos 2 classes.")
+        return
+    print(f"Número de classes detectado: {num_classes}")
     
-    # --- Fim da configuração do Dataset ---
-
-    writer = SummaryWriter(log_dir="runs/etapa2_multiclasse_experiment") 
+    # --- 3. DataLoaders ---
+    # (Não há mais divisão, apenas criamos os loaders)
     
-    # <-- MUDANÇA: Passa 'num_classes' para o modelo
+    # O batch_size é um hiperparâmetro. 16 é um bom começo.
+    BATCH_SIZE = 16 
+    
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=os.cpu_count() // 2 or 1) 
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=os.cpu_count() // 2 or 1)
+    test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=os.cpu_count() // 2 or 1)
+
+    # --- 4. O resto do script (Modelo, Treino, Avaliação) ---
+
+    writer = SummaryWriter(log_dir=f"runs/etapa2_multiclasse_aug_bs{BATCH_SIZE}") 
+    
     model = Rede(num_classes=num_classes)
     
-    # <-- MUDANÇA: Nova função de perda
     criterion = nn.CrossEntropyLoss() 
 
     trained_model = train_looping(model, train_loader, val_loader, criterion, writer, device)
