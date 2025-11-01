@@ -157,9 +157,9 @@ def prever_imagem(model, class_names, caminho_imagem, transform, device):
 if __name__ == "__main__":
     
     # ----------------------
-    MODELO_SALVO_PATH = "models/rna_etapa2_classificador_imagem.pth"
+    MODELO_SALVO_PATH = "models/modelo2.pth"
     PASTA_DE_TREINO = "Datasets/treino" # Usado para pegar os nomes das classes
-    IMAGEM_PARA_TESTAR = "image.png" #caminho da imagem para teste
+    IMAGEM_PARA_TESTAR = "imgs_teste/peca_real.png" #caminho da imagem para teste
     # ----------------------
     
     # Define o dispositivo
