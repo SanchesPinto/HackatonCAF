@@ -12,14 +12,14 @@ import cv2
 import numpy as np
 import random 
 import torchvision.models as models
-# import pandas as pd
+
 
 # ============================
 # 1. Definição dos Pipelines (Transforms)
 # ============================
 
 # Tamanho que a ResNet espera (pode ser 128x128, 224x224, etc.)
-# Vamos manter o seu 128 para ser mais rápido
+# Por enquanto em 128x128 para acelerar testes mas pode ser aumentado posteriormente
 IMG_SIZE = 128
 
 # Médias e desvios-padrão do ImageNet (correto para ResNet pré-treinada)
@@ -29,11 +29,10 @@ NORMALIZE_STD = [0.229, 0.224, 0.225]
 # --- Pipeline de TREINO (Com Data Augmentation) ---
 transform_treino = transforms.Compose([
     # Recorta uma área aleatória da imagem e redimensiona para IMG_SIZE
-    # Isso simula zoom e mudança de enquadramento. É ótimo!
+    # Isso simula zoom e mudança de enquadramento.
     transforms.RandomResizedCrop(IMG_SIZE, scale=(0.8, 1.0)), 
     
     # Vira a imagem horizontalmente com 50% de chance
-    # (assumindo que uma peça espelhada ainda seja da mesma classe)
     transforms.RandomHorizontalFlip(p=0.5),
     
     # Rotaciona a imagem aleatoriamente em até 15 graus
@@ -80,9 +79,9 @@ class Rede(nn.Module):
         """
         super(Rede, self).__init__()
         
-        # --- 1. O "Olho" (Encoder CNN) ---
-        # A sua lógica de carregar o ResNet18 pré-treinado e congelar 
-        # os pesos está perfeita para transfer learning.
+        # --- 1. Encoder CNN ---
+        # Lógica de carregar o ResNet18 pré-treinado e congelar 
+        # os pesos para transfer learning.
         resnet = models.resnet18(pretrained=True)
         
         for param in resnet.parameters():
@@ -94,12 +93,8 @@ class Rede(nn.Module):
         resnet.fc = nn.Identity()
         self.cnn_extractor = resnet
         
-        # --- 2. A "Memória" (LSTM) ---
-        # REMOVIDA! Não precisamos mais dela.
         
-        # --- 3. O "Juiz" (Classifier Head) ---
-        # O classificador agora recebe a saída da CNN (cnn_output_size=512)
-        # diretamente.
+        # --- 2. Classifier Head ---
         self.classifier = nn.Sequential(
             nn.Linear(cnn_output_size, 128), # Recebe as 512 features
             nn.ReLU(),
@@ -115,9 +110,7 @@ class Rede(nn.Module):
         features = self.cnn_extractor(x)
         output = self.classifier(features)
         
-        # <-- MUDANÇA: A saída agora é (B, num_classes)
-        # Esta saída são os LOGITS. 
-        # NÃO aplique Softmax aqui, pois a CrossEntropyLoss fará isso.
+        # A saída são os LOGITS. 
         return output
 
 # ============================
@@ -134,19 +127,16 @@ def avaliar_modelo(model, dataloader, criterion, device):
         for X_batch, y_batch in dataloader:
             X_batch = X_batch.to(device)
             
-            # <-- MUDANÇA: 
             # CrossEntropyLoss espera rótulos como Long (inteiros) e shape (B,)
-            # Removemos .float() e .view(-1, 1)
             y_batch = y_batch.to(device).long() 
 
             outputs = model(X_batch) # Saída são logits (B, num_classes)
             loss = criterion(outputs, y_batch) # CrossEntropyLoss compara (B, N) com (B,)
             total_loss += loss.item()
             
-            # <-- MUDANÇA: Cálculo de Acurácia para Multi-Classe
             # 1. 'outputs' tem shape (B, num_classes)
             # 2. torch.max(outputs.data, 1) retorna (valores_max, indices_max)
-            #    Estamos interessados nos índices (a classe prevista).
+            # índices = predicted classes
             _, predicted = torch.max(outputs.data, 1)
             # (Alternativa: predicted = torch.argmax(outputs, dim=1))
 
@@ -174,7 +164,7 @@ def train_looping(model, train_loader, val_loader, criterion, writer, device):
         total_train = 0
         for X_batch, y_batch in train_loader:
             X_batch = X_batch.to(device)
-            # <-- MUDANÇA: Rótulos como Long (inteiros) e shape (B,)
+            # Rótulos como Long (inteiros) e shape (B,)
             y_batch = y_batch.to(device).long() 
             
             optimizer.zero_grad()
@@ -184,7 +174,7 @@ def train_looping(model, train_loader, val_loader, criterion, writer, device):
             optimizer.step()
             total_loss += loss.item()
 
-            # <-- MUDANÇA: Cálculo de Acurácia Multi-Classe
+            # Cálculo de Acurácia Multi-Classe
             _, predicted = torch.max(outputs.data, 1)
             total_train += y_batch.size(0)
             correct_train += (predicted == y_batch).sum().item()
@@ -201,7 +191,7 @@ def train_looping(model, train_loader, val_loader, criterion, writer, device):
         writer.add_scalars("Accuracies", {"Train": train_acc, "Validation": val_acc}, epoch)
 
     os.makedirs("models", exist_ok=True)
-    model_path = "models/modelo2.pth" # Mudei o nome do modelo
+    model_path = "models/modelo2.pth" 
 
     torch.save({
         'model_state_dict': model.state_dict(),
@@ -213,7 +203,7 @@ def train_looping(model, train_loader, val_loader, criterion, writer, device):
     return model 
 
 # ============================
-# 5. Main (MODIFICADA para usar os novos pipelines)
+# 5. Main 
 # ============================
 
 def main():
@@ -222,13 +212,12 @@ def main():
 
     # --- 1. Caminhos para os diretórios ---
 
-    # Este é o diretório que contém as pastas 'treino', 'validacao' e 'teste'
     base_data_dir = "Datasets/" 
     train_dir = os.path.join(base_data_dir, "treino")
     val_dir = os.path.join(base_data_dir, "validacao")
     test_dir = os.path.join(base_data_dir, "teste")
     
-    # --- 2. Carregamento dos Datasets (Sem random_split) ---
+    # --- 2. Carregamento dos Datasets ---
     
     try:
         train_dataset = ImageFolder(root=train_dir, transform=transform_treino)
@@ -254,10 +243,7 @@ def main():
         return
     print(f"Número de classes detectado: {num_classes}")
     
-    # --- 3. DataLoaders ---
-    # (Não há mais divisão, apenas criamos os loaders)
-    
-    # O batch_size é um hiperparâmetro. 16 é um bom começo.
+
     BATCH_SIZE = 16 
     
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=os.cpu_count() // 2 or 1) 

@@ -9,14 +9,12 @@ import torch.nn.functional as F # Para usar o Softmax
 
 # ============================
 # 1. Definição da Arquitetura
-# (Exatamente a mesma classe 'Rede' do seu script de treino)
 # ============================
 class Rede(nn.Module):
     def __init__(self, cnn_output_size=512, classifier_dropout=0.5, num_classes=5):
         super(Rede, self).__init__()
-        resnet = models.resnet18(pretrained=True) # Não importa se pretrained=True ou False aqui
-        
-        # Congelamos por padrão, mas para inferência não faz diferença
+        resnet = models.resnet18(pretrained=True)
+
         for param in resnet.parameters():
             param.requires_grad = False
             
@@ -37,13 +35,12 @@ class Rede(nn.Module):
 
 # ============================
 # 2. Definição das Transformações
-# (Exatamente o 'transform_validacao_teste' do seu treino)
 # ============================
 IMG_SIZE = 128
 NORMALIZE_MEAN = [0.485, 0.456, 0.406]
 NORMALIZE_STD = [0.229, 0.224, 0.225]
 
-# Este é o único transform que precisamos para inferência
+#Transform necessário para inferência
 transform_inferencia = transforms.Compose([
     transforms.Resize((IMG_SIZE, IMG_SIZE)), 
     transforms.ToTensor(),
@@ -59,7 +56,7 @@ def carregar_modelo(caminho_modelo, caminho_pasta_treino, device):
     """
     print(f"Carregando mapa de classes de: {caminho_pasta_treino}")
     
-    # Truque para pegar os nomes das classes na ordem correta
+    # Para pegar os nomes das classes na ordem correta
     # ImageFolder os ordena alfabeticamente, exatamente como no treino
     try:
         # Usamos um transform dummy só para instanciar o dataset
@@ -87,8 +84,7 @@ def carregar_modelo(caminho_modelo, caminho_pasta_treino, device):
     # Move o modelo para o dispositivo (CPU ou GPU)
     model.to(device)
     
-    # IMPORTANTE: Define o modelo para o modo de avaliação
-    # Isso desliga o Dropout e o Batch Normalization (no caso da ResNet)
+    # Define o modelo para o modo de avaliação
     model.eval()
     
     return model, class_names
@@ -125,7 +121,7 @@ def prever_imagem(model, class_names, caminho_imagem, transform, device):
     with torch.no_grad():
         outputs = model(image_tensor) # Saída são os logits (ex: tensor([[-1.2, 4.5, 0.1, ...]]))
         
-        # 6. Converter logits para Probabilidades (para a apresentação!)
+        # 6. Converter logits para Probabilidades
         # Aplicamos Softmax para transformar os logits em probabilidades [0, 1]
         probabilities = F.softmax(outputs, dim=1)
         
@@ -133,7 +129,7 @@ def prever_imagem(model, class_names, caminho_imagem, transform, device):
         # torch.max retorna (valor_max, indice_max)
         top_prob, top_idx = torch.max(probabilities, 1)
         
-        # 8. Traduzir o índice para o nome da classe
+        # 8. Traddauzir o índice para o nome  classe
         predicted_class_index = top_idx.item() # .item() converte o tensor de 1 elemento em um número
         predicted_class_name = class_names[predicted_class_index]
         confidence = top_prob.item() * 100
@@ -159,7 +155,7 @@ if __name__ == "__main__":
     # ----------------------
     MODELO_SALVO_PATH = "models/modelo2.pth"
     PASTA_DE_TREINO = "Datasets/treino" # Usado para pegar os nomes das classes
-    IMAGEM_PARA_TESTAR = "imgs_teste/peca_real.png" #caminho da imagem para teste
+    IMAGEM_PARA_TESTAR = "imgs_teste/25.png" #caminho da imagem para teste
     # ----------------------
     
     # Define o dispositivo
@@ -173,5 +169,4 @@ if __name__ == "__main__":
         # Testa uma imagem
         prever_imagem(model, class_names, IMAGEM_PARA_TESTAR, transform_inferencia, device)
         
-        # Você pode adicionar mais chamadas aqui para testar outras imagens
-        # prever_imagem(model, class_names, "caminho/outra_foto.png", transform_inferencia, device)
+# ============================
