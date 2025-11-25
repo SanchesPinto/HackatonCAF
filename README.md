@@ -17,7 +17,6 @@ Desenvolvemos uma solução ponta-a-ponta que **automatiza a identificação de 
 Como Prova de Conceito, o escopo foi focado em um único componente: o **"Conjunto de Moagem" do Moedor CAF 8**, composto por 5 peças principais.
 
 
-
 ### Desafio Técnico e Estratégia
 
 O principal desafio foi a **ausência total de um dataset** de imagens das peças. Para contornar isso:
